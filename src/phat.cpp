@@ -133,29 +133,25 @@ void compute_pairing( std::string input_filename, std::string output_filename, b
     std::cerr << "filename; num_simplices; num_threads; time";
     // set up output format
     std::cerr << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision(2);
+    std::cout << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision(2);
 
     for(int n_threads = 1; n_threads < omp_get_thread_limit(); ++n_threads) {
-
         omp_set_num_threads(n_threads);
-
         double avg_pairs_time = 0;
         for(int attempt = 0; attempt < n_attempts; ++attempt) {
             matrix_copy = matrix;
-            std::cout << "hey: " << matrix_copy.get_num_cols() << std::endl;
 
             double pairs_timer = omp_get_wtime();
             phat::persistence_pairs pairs;
             LOG( "Computing persistence pairs with " << n_threads << " threads... " )
             phat::compute_persistence_pairs < Algorithm > ( pairs, matrix_copy );
-            avg_pairs_time += omp_get_wtime() - pairs_timer;
+            double elapsed = omp_get_wtime() - pairs_timer;
+            avg_pairs_time += elapsed;
+            LOG( "attempt " << attempt << ", elapsed " << elapsed << "\n" )
         }
-
         avg_pairs_time /= n_attempts;
-
-        double pairs_time_rounded = floor( avg_pairs_time * 100.0 + 0.5 ) / 100.0;
-
-        LOG( "Computing persistence pairs took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 2 ) << pairs_time_rounded <<" sec" )
-        std::cerr << input_filename << "; " << num_cols << "; " << n_threads << "; " << pairs_time_rounded << std::endl;
+        LOG( "Computing persistence pairs took " << avg_pairs_time <<" sec\n" )
+        std::cerr << input_filename << "; " << num_cols << "; " << n_threads << "; " << avg_pairs_time << std::endl;
     }
 }
 
