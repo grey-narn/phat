@@ -93,8 +93,75 @@ void parse_command_line( int argc, char** argv, bool& use_binary, Representation
 
 #define LOG(msg) if( verbose ) std::cout << msg << std::endl;
 
+
 template<typename Representation, typename Algorithm>
 void compute_pairing( std::string input_filename, std::string output_filename, bool use_binary, bool verbose, bool dualize ) {
+
+    int n_attempts = 5;
+
+    phat::boundary_matrix< Representation > matrix, matrix_copy;
+    bool read_successful;
+
+    double read_timer = omp_get_wtime();
+    if( use_binary ) {
+        LOG( "Reading input file " << input_filename << " in binary mode" )
+        read_successful = matrix.load_binary( input_filename );
+    } else {
+        LOG( "Reading input file " << input_filename << " in ascii mode" )
+        read_successful = matrix.load_ascii( input_filename );
+    }
+    double read_time = omp_get_wtime() - read_timer;
+    double read_time_rounded = floor( read_time * 10.0 + 0.5 ) / 10.0;
+    LOG( "Reading input file took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 1 ) << read_time_rounded <<"s" )
+
+    if( !read_successful ) {
+        std::cerr << "Error opening file " << input_filename << std::endl;
+        print_help_and_exit();
+    }
+
+    phat::index num_cols = matrix.get_num_cols();
+
+    if( dualize ) {
+        double dualize_timer = omp_get_wtime();
+        LOG( "Dualizing ..." )
+        phat::dualize ( matrix );
+        double dualize_time = omp_get_wtime() - dualize_timer;
+        double dualize_time_rounded = floor( dualize_time * 10.0 + 0.5 ) / 10.0;
+        LOG( "Dualizing took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 1 ) << dualize_time_rounded <<"s" )
+    }
+
+    std::cerr << "filename; num_simplices; num_threads; time";
+    // set up output format
+    std::cerr << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision(2);
+
+    for(int n_threads = 1; n_threads < omp_get_thread_limit(); ++n_threads) {
+
+        omp_set_num_threads(n_threads);
+
+        double avg_pairs_time = 0;
+        for(int attempt = 0; attempt < n_attempts; ++attempt) {
+            matrix_copy = matrix;
+            std::cout << "hey: " << matrix_copy.get_num_cols() << std::endl;
+
+            double pairs_timer = omp_get_wtime();
+            phat::persistence_pairs pairs;
+            LOG( "Computing persistence pairs with " << n_threads << " threads... " )
+            phat::compute_persistence_pairs < Algorithm > ( pairs, matrix_copy );
+            avg_pairs_time += omp_get_wtime() - pairs_timer;
+        }
+
+        avg_pairs_time /= n_attempts;
+
+        double pairs_time_rounded = floor( avg_pairs_time * 100.0 + 0.5 ) / 100.0;
+
+        LOG( "Computing persistence pairs took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 2 ) << pairs_time_rounded <<" sec" )
+        std::cerr << input_filename << "; " << num_cols << "; " << n_threads << "; " << pairs_time_rounded << std::endl;
+    }
+}
+
+
+template<typename Representation, typename Algorithm>
+void compute_pairing_old( std::string input_filename, std::string output_filename, bool use_binary, bool verbose, bool dualize ) {
 
     phat::boundary_matrix< Representation > matrix;
     bool read_successful;
@@ -115,7 +182,7 @@ void compute_pairing( std::string input_filename, std::string output_filename, b
         std::cerr << "Error opening file " << input_filename << std::endl;
         print_help_and_exit();
     }
-    
+
     phat::index num_cols = matrix.get_num_cols();
 
     if( dualize ) {
@@ -126,7 +193,7 @@ void compute_pairing( std::string input_filename, std::string output_filename, b
         double dualize_time_rounded = floor( dualize_time * 10.0 + 0.5 ) / 10.0;
         LOG( "Dualizing took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 1 ) << dualize_time_rounded <<"s" )
     }
-        
+
     double pairs_timer = omp_get_wtime();
     phat::persistence_pairs pairs;
     LOG( "Computing persistence pairs ..." )
@@ -134,9 +201,9 @@ void compute_pairing( std::string input_filename, std::string output_filename, b
     double pairs_time = omp_get_wtime() - pairs_timer;
     double pairs_time_rounded = floor( pairs_time * 10.0 + 0.5 ) / 10.0;
     LOG( "Computing persistence pairs took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 1 ) << pairs_time_rounded <<"s" )
-    
+
     if( dualize ) dualize_persistence_pairs( pairs, num_cols );
-    
+
 
     double write_timer = omp_get_wtime();
     if( use_binary ) {

@@ -34,10 +34,10 @@ namespace phat {
             const index num_stripes = omp_get_max_threads();
 
             index block_size = ( nr_columns % num_stripes == 0 ) ? nr_columns / num_stripes : block_size = nr_columns / num_stripes + 1;
-            
+
             std::vector< std::vector< index > > unreduced_cols_cur_pass( num_stripes );
             std::vector< std::vector< index > > unreduced_cols_next_pass( num_stripes );
-            
+
             for( index cur_dim = boundary_matrix.get_max_dim(); cur_dim >= 1 ; cur_dim-- ) {
                 #pragma omp parallel for schedule( guided, 1 )
                 for( index cur_stripe = 0; cur_stripe < num_stripes; cur_stripe++ ) {
