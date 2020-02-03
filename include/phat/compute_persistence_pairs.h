@@ -105,7 +105,7 @@ namespace phat {
             }
         }
     }
-    
+
     template< typename ReductionAlgorithm, typename Representation >
     inline void compute_persistence_pairs_dualized( persistence_pairs& pairs, boundary_matrix< Representation >& boundary_matrix ) {
 
@@ -113,13 +113,13 @@ namespace phat {
         compute_persistence_pairs< ReductionAlgorithm >( pairs, boundary_matrix );
         dualize_persistence_pairs( pairs, boundary_matrix.get_num_cols() );
     }
-    
+
     template< typename Representation >
     inline void compute_persistence_pairs( persistence_pairs& pairs, boundary_matrix< Representation >& boundary_matrix ) {
         phat::compute_persistence_pairs< twist_reduction >( pairs, boundary_matrix );
     }
-    
-    
+
+
     template< typename Representation >
     inline void compute_persistence_pairs_dualized( persistence_pairs& pairs, boundary_matrix< Representation >& boundary_matrix ) {
         compute_persistence_pairs_dualized< twist_reduction >( pairs, boundary_matrix );

@@ -16,6 +16,8 @@
     You should have received a copy of the GNU Lesser General Public License
     along with PHAT.  If not, see <http://www.gnu.org/licenses/>. */
 
+#include <limits>
+
 #include <phat/compute_persistence_pairs.h>
 
 #include <phat/representations/vector_vector.h>
@@ -95,7 +97,7 @@ void parse_command_line( int argc, char** argv, bool& use_binary, Representation
 
 
 template<typename Representation, typename Algorithm>
-void compute_pairing( std::string input_filename, std::string output_filename, bool use_binary, bool verbose, bool dualize ) {
+void reduce_only( std::string input_filename, std::string output_filename, bool use_binary, bool verbose, bool dualize ) {
 
     int n_attempts = 5;
 
@@ -130,7 +132,7 @@ void compute_pairing( std::string input_filename, std::string output_filename, b
         LOG( "Dualizing took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 1 ) << dualize_time_rounded <<"s" )
     }
 
-    std::cerr << "filename; num_simplices; num_threads; time";
+    std::cerr << "filename; num_threads; time_avg; time_min; time_max; num_simplices" << std::endl;
     // set up output format
     std::cerr << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision(2);
     std::cout << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision(2);
@@ -138,26 +140,37 @@ void compute_pairing( std::string input_filename, std::string output_filename, b
     for(int n_threads = 1; n_threads < omp_get_thread_limit(); ++n_threads) {
         omp_set_num_threads(n_threads);
         double avg_pairs_time = 0;
+        double min_pairs_time = std::numeric_limits<double>::max();
+        double max_pairs_time = -1;
         for(int attempt = 0; attempt < n_attempts; ++attempt) {
             matrix_copy = matrix;
 
             double pairs_timer = omp_get_wtime();
             phat::persistence_pairs pairs;
-            LOG( "Computing persistence pairs with " << n_threads << " threads... " )
-            phat::compute_persistence_pairs < Algorithm > ( pairs, matrix_copy );
+            LOG( "Reducing with " << n_threads << " threads... " )
+            Algorithm reduce;
+            reduce(matrix_copy);
             double elapsed = omp_get_wtime() - pairs_timer;
             avg_pairs_time += elapsed;
+            min_pairs_time = std::min(min_pairs_time, elapsed);
+            max_pairs_time = std::max(max_pairs_time, elapsed);
             LOG( "attempt " << attempt << ", elapsed " << elapsed << "\n" )
         }
         avg_pairs_time /= n_attempts;
-        LOG( "Computing persistence pairs took " << avg_pairs_time <<" sec\n" )
-        std::cerr << input_filename << "; " << num_cols << "; " << n_threads << "; " << avg_pairs_time << std::endl;
+        LOG( "Reducing matrix took " << avg_pairs_time <<" sec\n" )
+        std::cerr << input_filename << "; ";
+        std::cerr << n_threads << "; ";
+        std::cerr << avg_pairs_time << "; ";
+        std::cerr << min_pairs_time << "; ";
+        std::cerr << max_pairs_time << "; ";
+        std::cerr << num_cols;
+        std::cerr << std::endl;
     }
 }
 
 
 template<typename Representation, typename Algorithm>
-void compute_pairing_old( std::string input_filename, std::string output_filename, bool use_binary, bool verbose, bool dualize ) {
+void compute_pairing( std::string input_filename, std::string output_filename, bool use_binary, bool verbose, bool dualize ) {
 
     phat::boundary_matrix< Representation > matrix;
     bool read_successful;
@@ -214,16 +227,16 @@ void compute_pairing_old( std::string input_filename, std::string output_filenam
     LOG( "Writing output file took " << std::setiosflags( std::ios::fixed ) << std::setiosflags( std::ios::showpoint ) << std::setprecision( 1 ) << write_time_rounded <<"s" )
 }
 
-#define COMPUTE_PAIRING(Representation) \
+#define REDUCE_ONLY(Representation) \
     switch( algorithm ) { \
-    case STANDARD: compute_pairing< phat::Representation, phat::standard_reduction> ( input_filename, output_filename, use_binary, verbose, dualize ); break; \
-    case TWIST: compute_pairing< phat::Representation, phat::twist_reduction> ( input_filename, output_filename, use_binary, verbose, dualize ); break; \
-    case ROW: compute_pairing< phat::Representation, phat::row_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
-    case SPECTRAL_SEQUENCE: compute_pairing< phat::Representation, phat::spectral_sequence_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
-    case CHUNK: compute_pairing< phat::Representation, phat::chunk_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
+    case STANDARD: reduce_only< phat::Representation, phat::standard_reduction> ( input_filename, output_filename, use_binary, verbose, dualize ); break; \
+    case TWIST: reduce_only< phat::Representation, phat::twist_reduction> ( input_filename, output_filename, use_binary, verbose, dualize ); break; \
+    case ROW: reduce_only< phat::Representation, phat::row_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
+    case SPECTRAL_SEQUENCE: reduce_only< phat::Representation, phat::spectral_sequence_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
+    case CHUNK: reduce_only< phat::Representation, phat::chunk_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
     case CHUNK_SEQUENTIAL: int num_threads = omp_get_max_threads(); \
                            omp_set_num_threads( 1 ); \
-                           compute_pairing< phat::Representation, phat::chunk_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
+                           reduce_only< phat::Representation, phat::chunk_reduction >( input_filename, output_filename, use_binary, verbose, dualize ); break; \
                            omp_set_num_threads( num_threads ); \
                            break; \
     }
@@ -241,13 +254,13 @@ int main( int argc, char** argv )
     parse_command_line( argc, argv, use_binary, representation, algorithm, input_filename, output_filename, verbose, dualize );
 
     switch( representation ) {
-    case VECTOR_VECTOR: COMPUTE_PAIRING(vector_vector) break;
-    case VECTOR_HEAP: COMPUTE_PAIRING( vector_heap ) break;
-    case VECTOR_SET: COMPUTE_PAIRING(vector_set) break;
-    case VECTOR_LIST: COMPUTE_PAIRING(vector_list) break;
-    case FULL_PIVOT_COLUMN: COMPUTE_PAIRING(full_pivot_column) break;
-    case BIT_TREE_PIVOT_COLUMN: COMPUTE_PAIRING(bit_tree_pivot_column) break;
-    case SPARSE_PIVOT_COLUMN: COMPUTE_PAIRING(sparse_pivot_column) break;
-    case HEAP_PIVOT_COLUMN: COMPUTE_PAIRING(heap_pivot_column) break;
+    case VECTOR_VECTOR: REDUCE_ONLY(vector_vector) break;
+    case VECTOR_HEAP: REDUCE_ONLY( vector_heap ) break;
+    case VECTOR_SET: REDUCE_ONLY(vector_set) break;
+    case VECTOR_LIST: REDUCE_ONLY(vector_list) break;
+    case FULL_PIVOT_COLUMN: REDUCE_ONLY(full_pivot_column) break;
+    case BIT_TREE_PIVOT_COLUMN: REDUCE_ONLY(bit_tree_pivot_column) break;
+    case SPARSE_PIVOT_COLUMN: REDUCE_ONLY(sparse_pivot_column) break;
+    case HEAP_PIVOT_COLUMN: REDUCE_ONLY(heap_pivot_column) break;
     }
 }
